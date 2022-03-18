@@ -73,7 +73,7 @@ func BollingerClosingTrade(state *BollingerStateMachine, price float64) {
 }
 
 func BollingerLightenUpTrade(price float64) {
-	log.Printf("[executor] lighten up %+f at price %+f\n", 0.333, price)
+	log.Printf("[executor] lighten up %+f%% at price %+f\n", 0.333*100.0, price)
 }
 
 func BollingerOpeningTrade() (openStamp int64) {
@@ -122,7 +122,7 @@ func BollingerRequest(isRealTime uint8) (c *network.Candle, b *Bollinger) {
 		return
 	}
 
-	network.NetworkWait()
+	network.NetworkWait(15)
 
 	//query candle data
 	lastCandle := network.NetworkCandleRequest("1h")
@@ -247,13 +247,14 @@ func BollingerRealTime(brt *Bollinger) {
 			}
 		}
 
-		time.Sleep(16 * time.Second)
+		network.NetworkWait(16)
 	}
 }
 
 func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollinger, state *BollingerStateMachine, bollingerRealTime *Bollinger) {
 
 	var priceSeries []PriceSlot
+	var queryCycle int = 3
 
 	for {
 		runtime.NumGoroutine()
@@ -263,21 +264,21 @@ func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollin
 		residue = stampCurrent - (stampCurrent/3600)*3600
 
 		if residue > 27 && residue < 37 {
-			time.Sleep(1 * time.Second)
+			network.NetworkWait(1)
 			continue
 		}
 
 		price := network.NetworkPriceRequest()
 
 		if price < 0 {
-			log.Println("price request failed for one period")
-			time.Sleep(10 * time.Second)
+			log.Println("price request failed for a period")
+			network.NetworkWait(10)
 			continue
 		}
 
 		priceSeries = append(priceSeries, PriceSlot{price, (price >= float64((*BollingerMemory)[len(*BollingerMemory)-1].Lower))})
-		if len(priceSeries) >= 720 {
-			priceSeries = priceSeries[360:]
+		if len(priceSeries) >= 3600/queryCycle {
+			priceSeries = priceSeries[1800/queryCycle:]
 		}
 
 		fmt.Println(priceSeries[len(priceSeries)-1])
@@ -285,7 +286,7 @@ func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollin
 		if state.ControlState == STATE_EXE {
 
 			if state.ExecuteState == EXE_EXPIRE {
-				time.Sleep(10 * time.Second)
+				network.NetworkWait(10)
 				continue
 			}
 
@@ -307,7 +308,7 @@ func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollin
 				if stampCurrent_-OpenStamp > 0 && stampCurrent_-OpenStamp < 3000 {
 
 					//hold on 25 minutes
-					if PriceUnderBollingerDuration(150, &priceSeries) {
+					if PriceUnderBollingerDuration(60/queryCycle*25, &priceSeries) {
 						log.Printf("[executor] break bollinger lower band")
 						state.ExecuteState = EXE_BAD_TRADE
 						BollingerClosingTrade(state, price)
@@ -337,10 +338,13 @@ func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollin
 				}
 
 			}
+
+			//accerate the query frequency when activate the executor
+			network.NetworkWait(queryCycle)
+
+		} else {
+			network.NetworkWait(10)
 		}
-
-		time.Sleep(10 * time.Second)
-
 	}
 }
 

@@ -63,8 +63,8 @@ func NetworkCandleRequest(granularity string) (candlePointer *Candle) {
 	return
 }
 
-func NetworkWait() {
-	time.Sleep(15 * time.Second)
+func NetworkWait(scd int) {
+	time.Sleep(time.Duration(scd) * time.Second)
 }
 
 func NetworkPriceRequest() (price float64) {
