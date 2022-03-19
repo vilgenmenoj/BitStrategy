@@ -122,11 +122,15 @@ func BollingerRequest(isRealTime uint8) (c *network.Candle, b *Bollinger) {
 		return
 	}
 
-	network.NetworkWait(15)
+	network.NetworkWait(16)
 
 	//query candle data
 	lastCandle := network.NetworkCandleRequest("1h")
 	c = lastCandle
+
+	if len(bollingerArray) == 0 {
+		log.Fatalf(jsonText)
+	}
 
 	lastBollinger := &bollingerArray[1]
 	b = lastBollinger
@@ -217,7 +221,7 @@ func BollingerController(candles *[]network.Candle, bollingers *[]Bollinger, sta
 		var stampCurrent, residue, sleepDuration int64
 		stampCurrent = time.Now().Unix()
 		residue = stampCurrent - (stampCurrent/3600)*3600
-		sleepDuration = 3600 - residue - 15
+		sleepDuration = 3600 - residue + 1
 
 		//sleep one hour
 		time.Sleep(time.Duration(sleepDuration) * time.Second)
