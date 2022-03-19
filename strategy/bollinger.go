@@ -162,7 +162,7 @@ func BollingerController(candles *[]network.Candle, bollingers *[]Bollinger, sta
 
 	log.Println("[controller] startup")
 
-	//trigger this every hour at _:00:16, finish at _:00:32. During __:00:00 to __:01:00, realtime bollinger query is forbidden
+	//trigger this every hour at _:00:01(first query), finish at _:00:17(second query). During __:59:43 to __:00:34, realtime bollinger query is forbidden
 	for {
 		prCandle, prBollinger := BollingerRequest(0)
 
@@ -217,7 +217,7 @@ func BollingerController(candles *[]network.Candle, bollingers *[]Bollinger, sta
 		var stampCurrent, residue, sleepDuration int64
 		stampCurrent = time.Now().Unix()
 		residue = stampCurrent - (stampCurrent/3600)*3600
-		sleepDuration = 3600 - residue + 16
+		sleepDuration = 3600 - residue - 15
 
 		//sleep one hour
 		time.Sleep(time.Duration(sleepDuration) * time.Second)
@@ -235,7 +235,7 @@ func BollingerRealTime(brt *Bollinger) {
 		stampCurrent = time.Now().Unix()
 		residue = stampCurrent - (stampCurrent/3600)*3600
 
-		if residue > 60 && residue <= 3595 {
+		if residue > 34 && residue <= 3583 {
 			_, b := BollingerRequest(1)
 
 			if b != nil {
@@ -254,7 +254,7 @@ func BollingerRealTime(brt *Bollinger) {
 func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollinger, state *BollingerStateMachine, bollingerRealTime *Bollinger) {
 
 	var priceSeries []PriceSlot
-	var queryCycle int = 3
+	var queryCycle int = 2
 
 	for {
 		runtime.NumGoroutine()
@@ -263,7 +263,7 @@ func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollin
 		stampCurrent = time.Now().Unix()
 		residue = stampCurrent - (stampCurrent/3600)*3600
 
-		if residue > 27 && residue < 37 {
+		if residue >= 14 && residue <= 20 {
 			network.NetworkWait(1)
 			continue
 		}
@@ -307,8 +307,8 @@ func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollin
 
 				if stampCurrent_-OpenStamp > 0 && stampCurrent_-OpenStamp < 3000 {
 
-					//hold on 25 minutes
-					if PriceUnderBollingerDuration(60/queryCycle*25, &priceSeries) {
+					//hold on 20 minutes
+					if PriceUnderBollingerDuration(60/queryCycle*20, &priceSeries) {
 						log.Printf("[executor] break bollinger lower band")
 						state.ExecuteState = EXE_BAD_TRADE
 						BollingerClosingTrade(state, price)
@@ -320,6 +320,15 @@ func BollingerExecutor(CandleMemory *[]network.Candle, BollingerMemory *[]Bollin
 				}
 
 			} else if price >= float64(bollingerRealTime.Middle) && price < float64(bollingerRealTime.Upper) {
+
+				if bollingerRealTime.Middle-float32(state.OpeningPosition) <= float32(state.OpeningPosition)*0.0041 {
+					log.Printf("[executor] access middle but close immediately")
+					state.ExecuteState = EXE_NEUTRAL_TRADE
+					BollingerClosingTrade(state, price)
+					network.NetworkWait(10)
+					continue
+				}
+
 				if state.ExecuteState != EXE_ACTIVE_MIDDLE {
 					state.ExecuteState = EXE_ACTIVE_MIDDLE
 					BollingerLightenUpTrade(price)
@@ -374,7 +383,7 @@ func BollingerStart() {
 	//startup bollinger updating thread
 	go BollingerRealTime(&bollingerRealTime)
 
-	//remain as executor thread, query every 10 seconds, except from _:00:27 to _:00:37
+	//remain as executor thread, query every 10 seconds, except from _:00:14 to _:00:20
 	log.Printf("[executor] startup")
 	BollingerExecutor(&CandleMemory, &BollingerMemory, &state, &bollingerRealTime)
 
