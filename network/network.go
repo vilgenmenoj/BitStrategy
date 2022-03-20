@@ -88,7 +88,8 @@ func NetworkPriceRequest() (price float64) {
 	price, err := strconv.ParseFloat(priceText, 64)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("parsing error %s", jsonText)
+		return -1.0
 	}
 
 	return
